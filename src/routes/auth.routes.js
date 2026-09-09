@@ -29,6 +29,15 @@ router.post(
 
 router.post('/logout', verifyJwt, authController.logout);
 
+// Email Verification
+router.get('/verify-email', authController.verifyEmail);
+router.post(
+  '/resend-verification',
+  authRateLimiter,
+  requireFields(['email']),
+  authController.resendVerification
+);
+
 // Optional helper route for /api/v1/auth/me or /api/v1/auth/profile
 router.get('/me', verifyJwt, authController.getProfile);
 router.get('/profile', verifyJwt, authController.getProfile);

@@ -48,6 +48,56 @@ export const authController = {
     }
   },
 
+  async verifyEmail(req, res, next) {
+    try {
+      const token = req.query.token || req.body.token;
+      const result = await authService.verifyEmail(token);
+
+      // If browser accepts HTML, render clean confirmation UI
+      if (req.headers.accept && req.headers.accept.includes('text/html')) {
+        return res.send(`
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>Email Verified - Toy Store</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <style>
+              body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #f8fafc; color: #1e293b; }
+              .card { background: white; padding: 2.5rem; border-radius: 16px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.08); text-align: center; max-width: 420px; width: 90%; }
+              .icon { font-size: 3rem; margin-bottom: 1rem; }
+              h1 { color: #16a34a; font-size: 1.6rem; margin: 0 0 0.5rem 0; font-weight: 700; }
+              p { color: #64748b; font-size: 0.95rem; line-height: 1.5; margin-bottom: 1.5rem; }
+              .badge { display: inline-block; background: #dcfce7; color: #15803d; padding: 0.35rem 0.85rem; border-radius: 9999px; font-weight: 600; font-size: 0.85rem; margin-bottom: 1.5rem; }
+            </style>
+          </head>
+          <body>
+            <div class="card">
+              <div class="icon">🎉</div>
+              <h1>Email Verified Successfully!</h1>
+              <div class="badge">Account Active</div>
+              <p>Your account has been activated. You can now return to the Toy Store application and log in.</p>
+            </div>
+          </body>
+          </html>
+        `);
+      }
+
+      return successResponse(res, result);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async resendVerification(req, res, next) {
+    try {
+      const { email } = req.body;
+      const result = await authService.resendVerification(email);
+      return successResponse(res, result);
+    } catch (err) {
+      next(err);
+    }
+  },
+
   async getProfile(req, res, next) {
     try {
       const profile = await authService.getProfile(req.user.userId);

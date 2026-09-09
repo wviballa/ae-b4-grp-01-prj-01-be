@@ -23,15 +23,28 @@ export const userRepository = {
     return data;
   },
 
-  async create({ email, passwordHash, role = 'CUSTOMER' }) {
+  async create({ email, passwordHash, role = 'CUSTOMER', status = 'UNVERIFIED' }) {
     const { data, error } = await supabaseAdmin
       .from('users')
       .insert({
         email: email.toLowerCase(),
         passwordHash,
         role,
+        status,
       })
       .select('userId, email, role, status, createdAt')
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async verifyEmail(userId) {
+    const { data, error } = await supabaseAdmin
+      .from('users')
+      .update({ status: 'ACTIVE' })
+      .eq('userId', userId)
+      .select('userId, email, role, status')
       .single();
 
     if (error) throw error;
@@ -50,3 +63,4 @@ export const userRepository = {
     return data;
   },
 };
+
