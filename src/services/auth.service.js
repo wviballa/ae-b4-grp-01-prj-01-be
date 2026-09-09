@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { userRepository } from '../repositories/user.repository.js';
 import { profileRepository } from '../repositories/profile.repository.js';
+import { supabaseAdmin } from '../config/supabase.js';
 import { ENV } from '../config/env.js';
 import { ApiError } from '../utils/apiError.js';
 
@@ -67,8 +68,33 @@ export const authService = {
     });
 
     if (initialStatus === 'UNVERIFIED') {
-      const token = this.generateVerificationToken(newUser);
-      const verificationLink = `http://localhost:${ENV.PORT}/api/v1/auth/verify-email?token=${token}`;
+      let verificationLink;
+
+      try {
+        const redirectUrl = ENV.CLIENT_URL
+          ? `${ENV.CLIENT_URL}/verify-email`
+          : `http://localhost:${ENV.PORT}/api/v1/auth/verify-email`;
+
+        const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+          type: 'signup',
+          email: email.toLowerCase(),
+          password,
+          options: {
+            redirectTo: redirectUrl,
+          },
+        });
+
+        if (!linkError && linkData?.properties?.action_link) {
+          verificationLink = linkData.properties.action_link;
+        }
+      } catch (err) {
+        console.warn('⚠️ Supabase Auth email link warning:', err.message);
+      }
+
+      if (!verificationLink) {
+        const token = this.generateVerificationToken(newUser);
+        verificationLink = `http://localhost:${ENV.PORT}/api/v1/auth/verify-email?token=${token}`;
+      }
 
       return {
         user: {
