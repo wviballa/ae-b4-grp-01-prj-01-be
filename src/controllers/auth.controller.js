@@ -5,12 +5,13 @@ import { successResponse, createdResponse } from '../utils/apiResponse.js';
 export const authController = {
   async register(req, res, next) {
     try {
-      const { email, password, firstName, lastName, phone } = req.body;
+      const { email, password, firstName, lastName, fullName, name, phone } = req.body;
       const result = await authService.register({
         email,
         password,
         firstName,
         lastName,
+        fullName: fullName || name,
         phone,
       });
       return createdResponse(res, result);

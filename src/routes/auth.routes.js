@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { authController } from '../controllers/auth.controller.js';
 import { verifyJwt } from '../middleware/verifyJwt.js';
 import { authRateLimiter } from '../middleware/rateLimiter.js';
-import { requireFields } from '../middleware/validateReq.js';
+import { requireFields, validateRegistration } from '../middleware/validateReq.js';
 
 const router = Router();
 
@@ -10,7 +10,7 @@ const router = Router();
 router.post(
   '/register',
   authRateLimiter,
-  requireFields(['email', 'password']),
+  validateRegistration,
   authController.register
 );
 

@@ -24,7 +24,16 @@ export const authService = {
     return { accessToken, refreshToken };
   },
 
-  async register({ email, password, firstName, lastName, phone, role = 'CUSTOMER' }) {
+  async register({ email, password, firstName, lastName, fullName, phone, role = 'CUSTOMER' }) {
+    let resolvedFirstName = firstName;
+    let resolvedLastName = lastName;
+
+    if (!resolvedFirstName && fullName && typeof fullName === 'string') {
+      const parts = fullName.trim().split(/\s+/);
+      resolvedFirstName = parts[0] || '';
+      resolvedLastName = parts.slice(1).join(' ') || '';
+    }
+
     const existing = await userRepository.findByEmail(email);
     if (existing) {
       throw ApiError.conflict('An account with this email address already exists');
@@ -40,8 +49,8 @@ export const authService = {
     });
 
     const profile = await profileRepository.createOrUpdate(newUser.userId, {
-      firstName,
-      lastName,
+      firstName: resolvedFirstName,
+      lastName: resolvedLastName,
       phone,
     });
 
