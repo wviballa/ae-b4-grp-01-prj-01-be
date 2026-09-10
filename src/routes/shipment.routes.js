@@ -9,5 +9,6 @@ router.get('/track/:trackingNumber', shipmentController.trackShipment);
 
 // Customer order shipment tracking
 router.get('/orders/:orderId', verifyJwt, shipmentController.getOrderShipment);
+router.get('/:orderId', verifyJwt, shipmentController.getOrderShipment);
 
 export default router;

@@ -30,4 +30,13 @@ export const paymentController = {
       next(err);
     }
   },
+
+  async getPaymentByOrderId(req, res, next) {
+    try {
+      const payments = await paymentService.getPaymentByOrderId(req.params.orderId, req.user.userId);
+      return successResponse(res, payments);
+    } catch (err) {
+      next(err);
+    }
+  },
 };

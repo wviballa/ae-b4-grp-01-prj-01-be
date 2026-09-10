@@ -90,4 +90,13 @@ export const paymentService = {
       return { success: false, message: 'Payment failed, inventory reservation released', orderId: order.orderId };
     }
   },
+
+  async getPaymentByOrderId(orderId, userId = null) {
+    const order = await orderRepository.findById(orderId, userId);
+    if (!order) {
+      throw ApiError.notFound('Order not found');
+    }
+    const payments = await paymentRepository.findByOrderId(orderId);
+    return payments;
+  },
 };

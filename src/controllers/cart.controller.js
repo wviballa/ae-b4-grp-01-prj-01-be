@@ -1,10 +1,23 @@
 import { cartService } from '../services/cart.service.js';
 import { successResponse } from '../utils/apiResponse.js';
+import { ApiError } from '../utils/apiError.js';
 
 export const cartController = {
   _getIdentifiers(req) {
     const userId = req.user?.userId || null;
-    const sessionToken = req.headers['x-cart-session'] || req.cookies?.cart_session || null;
+    let sessionToken =
+      req.headers['x-session-token'] ||
+      req.headers['x-cart-session'] ||
+      req.headers['x-guest-token'] ||
+      req.query?.sessionToken ||
+      req.body?.sessionToken ||
+      req.cookies?.cart_session ||
+      null;
+
+    if (!userId && !sessionToken) {
+      sessionToken = `guest_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    }
+
     return { userId, sessionToken };
   },
 

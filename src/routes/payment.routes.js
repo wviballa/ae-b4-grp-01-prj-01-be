@@ -18,4 +18,6 @@ router.post(
   paymentController.webhook
 );
 
+router.get('/:orderId', verifyJwt, paymentController.getPaymentByOrderId);
+
 export default router;
