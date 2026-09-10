@@ -16,7 +16,7 @@ router.get('/reports/overview', adminController.getOverview);
 router.get('/products', adminController.listProducts);
 router.post(
   '/products',
-  requireFields(['name', 'slug', 'sku', 'price']),
+  requireFields(['name', 'sku', 'price']),
   adminController.createProduct
 );
 router.put('/products/:productId', adminController.updateProduct);
@@ -37,7 +37,7 @@ router.patch('/inventory/:productId', adminController.updateInventory);
 // 4. Categories
 router.post(
   '/categories',
-  requireFields(['name', 'slug']),
+  requireFields(['name']),
   adminController.createCategory
 );
 router.put('/categories/:categoryId', adminController.updateCategory);
@@ -46,6 +46,8 @@ router.delete('/categories/:categoryId', adminController.deleteCategory);
 // 5. Orders & Fulfillment
 router.get('/orders', adminController.listOrders);
 router.get('/orders/:orderId', adminController.getOrder);
+router.put('/orders/:orderId/status', requireFields(['status']), adminController.updateOrderStatus);
+router.patch('/orders/:orderId/status', requireFields(['status']), adminController.updateOrderStatus);
 router.post('/orders/:orderId/fulfill', adminController.fulfillOrder);
 router.post('/orders/:orderId/cancel', adminController.cancelOrder);
 

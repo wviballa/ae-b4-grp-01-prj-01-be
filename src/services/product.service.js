@@ -16,6 +16,16 @@ export const productService = {
   },
 
   async createProduct(productData) {
+    if (!productData.slug && productData.name) {
+      productData.slug =
+        productData.name
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/(^-|-$)/g, '') +
+        '-' +
+        Date.now().toString().slice(-4);
+    }
+
     const existing = await productRepository.findByIdOrSlug(productData.slug);
     if (existing) {
       throw ApiError.conflict(`A product with slug '${productData.slug}' already exists`);
@@ -25,7 +35,11 @@ export const productService = {
 
     // Initialize inventory for this product
     await inventoryRepository.createOrInit(newProduct.productId, {
-      stockQuantity: productData.initialStock || 0,
+      stockQuantity:
+        productData.initialStock ??
+        productData.stock ??
+        productData.stockQuantity ??
+        50,
       lowStockThreshold: productData.lowStockThreshold || 5,
     });
 

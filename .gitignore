@@ -20,6 +20,10 @@ yarn-error.log*
 dist/
 build/
 
+# Local Scratch & Temporary folders
+Scratch/
+scratch/
+
 # OS files
 .DS_Store
 Thumbs.db

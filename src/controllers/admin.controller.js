@@ -170,6 +170,16 @@ export const adminController = {
     }
   },
 
+  async updateOrderStatus(req, res, next) {
+    try {
+      const { status } = req.body;
+      const updated = await orderRepository.updateStatus(req.params.orderId, status);
+      return successResponse(res, updated);
+    } catch (err) {
+      next(err);
+    }
+  },
+
   // --- Reviews Moderation ---
   async listReviews(req, res, next) {
     try {
@@ -203,32 +213,58 @@ export const adminController = {
   async getOverview(req, res, next) {
     try {
       // Aggregate stats safely
-      const { count: totalOrders } = await supabaseAdmin
+      const { count: totalOrdersCount } = await supabaseAdmin
         .from('orders')
         .select('*', { count: 'exact', head: true });
 
-      const { count: totalProducts } = await supabaseAdmin
+      const { count: totalProductsCount } = await supabaseAdmin
         .from('products')
         .select('*', { count: 'exact', head: true })
         .eq('status', 'ACTIVE');
 
-      const { data: paidOrders } = await supabaseAdmin
+      const { data: allOrders } = await supabaseAdmin
         .from('orders')
-        .select('totalAmount')
-        .in('status', ['PROCESSING', 'SHIPPED', 'DELIVERED']);
+        .select('orderId, totalAmount, status, createdAt');
 
-      const totalRevenue = (paidOrders || []).reduce(
+      const activeOrders = (allOrders || []).filter((o) => o.status !== 'CANCELLED');
+
+      const totalRevenue = activeOrders.reduce(
         (sum, ord) => sum + Number(ord.totalAmount || 0),
         0
       );
+
+      const totalOrders = totalOrdersCount || 0;
+      const activeProducts = totalProductsCount || 0;
+      const averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+
+      const orderMetrics = {
+        total: totalOrders,
+        pending: (allOrders || []).filter((o) => o.status === 'PENDING').length,
+        confirmed: (allOrders || []).filter((o) => o.status === 'CONFIRMED' || o.status === 'PENDING').length,
+        processing: (allOrders || []).filter((o) => o.status === 'PROCESSING').length,
+        delivered: (allOrders || []).filter((o) => o.status === 'DELIVERED' || o.status === 'COMPLETED').length,
+        cancelled: (allOrders || []).filter((o) => o.status === 'CANCELLED').length,
+      };
 
       const lowStockItems = await inventoryRepository.listAll({ lowStockOnly: true });
 
       return successResponse(res, {
         totalRevenue: Number(totalRevenue.toFixed(2)),
-        totalOrders: totalOrders || 0,
-        activeProducts: totalProducts || 0,
+        revenue: Number(totalRevenue.toFixed(2)),
+        totalOrders,
+        orderCount: totalOrders,
+        orders: totalOrders,
+        averageOrderValue: Number(averageOrderValue.toFixed(2)),
+        activeProducts,
+        activeProductsCount: activeProducts,
+        productCount: activeProducts,
         lowStockAlertsCount: lowStockItems.length,
+        lowStockAlerts: lowStockItems,
+        orderMetrics,
+        confirmedOrders: orderMetrics.confirmed,
+        processingOrders: orderMetrics.processing,
+        deliveredOrders: orderMetrics.delivered,
+        cancelledOrders: orderMetrics.cancelled,
       });
     } catch (err) {
       next(err);

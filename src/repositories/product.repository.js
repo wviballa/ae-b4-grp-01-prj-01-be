@@ -94,6 +94,7 @@ export const productRepository = {
   },
 
   async findByIdOrSlug(idOrSlug) {
+    if (!idOrSlug) return null;
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrSlug);
 
     let query = supabaseAdmin
@@ -110,10 +111,12 @@ export const productRepository = {
     if (isUuid) {
       query = query.eq('productId', idOrSlug);
     } else {
-      query = query.eq('slug', idOrSlug);
+      const cleanSlug = String(idOrSlug).trim();
+      const altSlug = cleanSlug.includes('_') ? cleanSlug.replace(/_/g, '-') : cleanSlug.replace(/-/g, '_');
+      query = query.or(`slug.eq.${cleanSlug},slug.eq.${altSlug},slug.ilike.%${cleanSlug}%,sku.ilike.%${cleanSlug}%`);
     }
 
-    const { data, error } = await query.maybeSingle();
+    const { data, error } = await query.limit(1).maybeSingle();
     if (error) throw error;
     return data;
   },
