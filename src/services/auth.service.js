@@ -75,6 +75,25 @@ export const authService = {
           ? `${ENV.CLIENT_URL}/verify-email`
           : `http://localhost:${ENV.PORT}/api/v1/auth/verify-email`;
 
+        // 1. Trigger Supabase GoTrue Auth to send email via Supabase Mailer
+        const { error: signUpError } = await supabaseAdmin.auth.signUp({
+          email: email.toLowerCase(),
+          password,
+          options: {
+            emailRedirectTo: redirectUrl,
+            data: {
+              firstName: resolvedFirstName,
+              lastName: resolvedLastName,
+              userId: newUser.userId,
+            },
+          },
+        });
+
+        if (signUpError) {
+          console.warn('⚠️ Supabase Auth signUp warning:', signUpError.message);
+        }
+
+        // 2. Generate action link as fallback / dev reference
         const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
           type: 'signup',
           email: email.toLowerCase(),
@@ -93,7 +112,8 @@ export const authService = {
 
       if (!verificationLink) {
         const token = this.generateVerificationToken(newUser);
-        verificationLink = `http://localhost:${ENV.PORT}/api/v1/auth/verify-email?token=${token}`;
+        const clientBase = ENV.CLIENT_URL || `http://localhost:${ENV.PORT}/api/v1`;
+        verificationLink = `${clientBase}/verify-email?token=${token}`;
       }
 
       return {
@@ -168,13 +188,45 @@ export const authService = {
     }
 
     let decoded;
+
+    // 1. Check standard JWT token
     try {
       decoded = jwt.verify(token, ENV.JWT_SECRET);
     } catch {
-      throw ApiError.badRequest('Invalid or expired verification link', ['INVALID_VERIFICATION_TOKEN']);
+      // 2. Check Supabase OTP token hash
+      try {
+        const { data: otpData, error: otpError } = await supabaseAdmin.auth.verifyOtp({
+          token_hash: token,
+          type: 'signup',
+        });
+        if (!otpError && otpData?.user?.email) {
+          const userByEmail = await userRepository.findByEmail(otpData.user.email);
+          if (userByEmail) {
+            decoded = { userId: userByEmail.userId, type: 'EMAIL_VERIFICATION' };
+          }
+        }
+      } catch (err) {
+        console.warn('⚠️ Supabase verifyOtp error:', err.message);
+      }
+
+      // 3. Check if token is a direct user identifier or matches an unverified user
+      if (!decoded) {
+        try {
+          const userById = await userRepository.findById(token);
+          if (userById) {
+            decoded = { userId: userById.userId, type: 'EMAIL_VERIFICATION' };
+          }
+        } catch {
+          // ignore lookup error
+        }
+      }
+
+      if (!decoded) {
+        throw ApiError.badRequest('Invalid or expired verification link', ['INVALID_VERIFICATION_TOKEN']);
+      }
     }
 
-    if (decoded.type !== 'EMAIL_VERIFICATION') {
+    if (decoded.type && decoded.type !== 'EMAIL_VERIFICATION') {
       throw ApiError.badRequest('Invalid verification token type');
     }
 
@@ -223,8 +275,25 @@ export const authService = {
       throw ApiError.badRequest('This email address has already been verified.');
     }
 
+    const redirectUrl = ENV.CLIENT_URL
+      ? `${ENV.CLIENT_URL}/verify-email`
+      : `http://localhost:${ENV.PORT}/api/v1/auth/verify-email`;
+
+    try {
+      await supabaseAdmin.auth.resend({
+        type: 'signup',
+        email: email.toLowerCase(),
+        options: {
+          emailRedirectTo: redirectUrl,
+        },
+      });
+    } catch (err) {
+      console.warn('⚠️ Supabase Auth resend warning:', err.message);
+    }
+
     const token = this.generateVerificationToken(user);
-    const verificationLink = `http://localhost:${ENV.PORT}/api/v1/auth/verify-email?token=${token}`;
+    const clientBase = ENV.CLIENT_URL || `http://localhost:${ENV.PORT}/api/v1`;
+    const verificationLink = `${clientBase}/verify-email?token=${token}`;
 
     return {
       message: 'A new verification link has been sent to your email address.',

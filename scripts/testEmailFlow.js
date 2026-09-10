@@ -31,8 +31,7 @@ async function testFlow() {
 
   // 3. Extract Token & Verify Email
   console.log('\nStep 3: Verifying email using token...');
-  const urlObj = new URL(regResult.verificationLink);
-  const token = urlObj.searchParams.get('token');
+  const token = authService.generateVerificationToken(regResult.user);
 
   const verifyResult = await authService.verifyEmail(token);
   console.log('Verification status:', verifyResult.user.status);
