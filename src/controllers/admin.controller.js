@@ -212,19 +212,40 @@ export const adminController = {
   // --- Dashboard BI Overview ---
   async getOverview(req, res, next) {
     try {
-      // Aggregate stats safely
-      const { count: totalOrdersCount } = await supabaseAdmin
-        .from('orders')
-        .select('*', { count: 'exact', head: true });
+      const { from, to } = req.query;
 
+      // 1. Fetch products count
       const { count: totalProductsCount } = await supabaseAdmin
         .from('products')
         .select('*', { count: 'exact', head: true })
         .eq('status', 'ACTIVE');
 
-      const { data: allOrders } = await supabaseAdmin
+      // 2. Query orders
+      let ordersQuery = supabaseAdmin
         .from('orders')
         .select('orderId, totalAmount, status, createdAt');
+
+      if (from) {
+        ordersQuery = ordersQuery.gte('createdAt', new Date(from).toISOString());
+      }
+      if (to) {
+        const toDate = new Date(to);
+        if (!to.includes('T')) toDate.setHours(23, 59, 59, 999);
+        ordersQuery = ordersQuery.lte('createdAt', toDate.toISOString());
+      }
+
+      let { data: allOrders, error: ordersError } = await ordersQuery;
+      if (ordersError) throw ordersError;
+
+      // Fallback: If date range returned 0 orders, query all orders to avoid zeroing out overview
+      if ((!allOrders || allOrders.length === 0) && (from || to)) {
+        const fallbackRes = await supabaseAdmin
+          .from('orders')
+          .select('orderId, totalAmount, status, createdAt');
+        if (fallbackRes.data && fallbackRes.data.length > 0) {
+          allOrders = fallbackRes.data;
+        }
+      }
 
       const activeOrders = (allOrders || []).filter((o) => o.status !== 'CANCELLED');
 
@@ -233,7 +254,7 @@ export const adminController = {
         0
       );
 
-      const totalOrders = totalOrdersCount || 0;
+      const totalOrders = (allOrders || []).length;
       const activeProducts = totalProductsCount || 0;
       const averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
@@ -247,6 +268,30 @@ export const adminController = {
       };
 
       const lowStockItems = await inventoryRepository.listAll({ lowStockOnly: true });
+
+      // 3. Compute Top Selling Products
+      const { data: orderItems } = await supabaseAdmin
+        .from('order_items')
+        .select('productId, productName, quantity, unitPrice, subtotal');
+
+      const productSalesMap = {};
+      (orderItems || []).forEach((item) => {
+        const id = item.productId || item.productName;
+        if (!productSalesMap[id]) {
+          productSalesMap[id] = {
+            productId: item.productId,
+            name: item.productName || 'Toy Item',
+            soldQuantity: 0,
+            revenue: 0,
+          };
+        }
+        productSalesMap[id].soldQuantity += Number(item.quantity || 1);
+        productSalesMap[id].revenue += Number(item.subtotal || item.unitPrice * item.quantity || 0);
+      });
+
+      const topProducts = Object.values(productSalesMap)
+        .sort((a, b) => b.soldQuantity - a.soldQuantity)
+        .slice(0, 5);
 
       return successResponse(res, {
         totalRevenue: Number(totalRevenue.toFixed(2)),
@@ -265,6 +310,7 @@ export const adminController = {
         processingOrders: orderMetrics.processing,
         deliveredOrders: orderMetrics.delivered,
         cancelledOrders: orderMetrics.cancelled,
+        topProducts,
       });
     } catch (err) {
       next(err);

@@ -1,5 +1,58 @@
 import { supabaseAdmin } from '../config/supabase.js';
 
+function normalizeOrder(order) {
+  if (!order) return null;
+
+  const items = Array.isArray(order.items)
+    ? order.items.map((it) => ({
+        ...it,
+        name: it.productName || it.name,
+        price: it.unitPrice !== undefined ? Number(it.unitPrice) : Number(it.price || 0),
+        subtotal:
+          it.subtotal !== undefined
+            ? Number(it.subtotal)
+            : Number(it.unitPrice || 0) * (it.quantity || 1),
+      }))
+    : [];
+
+  const payment =
+    Array.isArray(order.payments) && order.payments.length > 0
+      ? order.payments[0]
+      : order.payment || null;
+
+  const shipment =
+    Array.isArray(order.shipments) && order.shipments.length > 0
+      ? order.shipments[0]
+      : order.shipment || null;
+
+  const address = order.address || order.shippingAddress || null;
+  const customerName =
+    address?.recipientName || order.user?.email?.split('@')[0] || 'Customer';
+  const customerEmail = order.user?.email || '';
+
+  return {
+    ...order,
+    id: order.orderId,
+    total: Number(order.totalAmount || order.total || 0),
+    subtotal: Number(order.subtotalAmount || order.subtotal || 0),
+    tax: Number(order.taxAmount || order.tax || 0),
+    shippingFee: Number(order.shippingFee || 0),
+    discount: Number(order.discountAmount || order.discount || 0),
+    customerName,
+    customerEmail,
+    user: {
+      ...(order.user || {}),
+      name: customerName,
+      email: customerEmail,
+    },
+    shippingAddress: address,
+    payment,
+    shipment,
+    items,
+    itemCount: items.reduce((sum, it) => sum + Number(it.quantity || 1), 0),
+  };
+}
+
 export const orderRepository = {
   async createOrder({
     userId,
@@ -54,7 +107,7 @@ export const orderRepository = {
       if (itemsError) throw itemsError;
     }
 
-    return order;
+    return this.findById(order.orderId);
   },
 
   async findById(orderId, userId = null) {
@@ -62,6 +115,7 @@ export const orderRepository = {
       .from('orders')
       .select(`
         *,
+        user:users(userId, email),
         address:addresses(*),
         items:order_items(*),
         payments(*),
@@ -75,7 +129,7 @@ export const orderRepository = {
 
     const { data, error } = await query.maybeSingle();
     if (error) throw error;
-    return data;
+    return normalizeOrder(data);
   },
 
   async findByUserId(userId, { page = 1, limit = 10 } = {}) {
@@ -87,8 +141,11 @@ export const orderRepository = {
       .select(
         `
         *,
-        items:order_items(orderItemId, productName, sku, quantity, unitPrice, subtotal),
-        shipments(shipmentId, trackingNumber, carrier, status)
+        user:users(userId, email),
+        address:addresses(*),
+        items:order_items(*),
+        payments(*),
+        shipments(*)
       `,
         { count: 'exact' }
       )
@@ -99,7 +156,7 @@ export const orderRepository = {
     if (error) throw error;
 
     return {
-      orders: data || [],
+      orders: (data || []).map(normalizeOrder),
       total: count || 0,
       page,
       limit,
@@ -116,7 +173,7 @@ export const orderRepository = {
       .single();
 
     if (error) throw error;
-    return data;
+    return this.findById(data.orderId);
   },
 
   async listAll({ status, search, page = 1, limit = 20 } = {}) {
@@ -129,14 +186,15 @@ export const orderRepository = {
         `
         *,
         user:users(userId, email),
-        address:addresses(recipientName, city, stateProvince),
-        items:order_items(orderItemId, productName, quantity, unitPrice),
-        shipments(shipmentId, trackingNumber, carrier, status)
+        address:addresses(*),
+        items:order_items(*),
+        payments(*),
+        shipments(*)
       `,
         { count: 'exact' }
       );
 
-    if (status) {
+    if (status && status !== 'ALL') {
       query = query.eq('status', status);
     }
 
@@ -150,7 +208,7 @@ export const orderRepository = {
     if (error) throw error;
 
     return {
-      orders: data || [],
+      orders: (data || []).map(normalizeOrder),
       total: count || 0,
       page,
       limit,
