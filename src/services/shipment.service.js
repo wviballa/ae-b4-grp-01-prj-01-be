@@ -3,10 +3,13 @@ import { orderRepository } from '../repositories/order.repository.js';
 import { ApiError } from '../utils/apiError.js';
 
 export const shipmentService = {
-  async trackShipment(trackingNumber) {
-    const shipment = await shipmentRepository.findByTrackingNumber(trackingNumber);
+  async trackShipment(trackingNumberOrOrderId) {
+    let shipment = await shipmentRepository.findByTrackingNumber(trackingNumberOrOrderId);
     if (!shipment) {
-      throw ApiError.notFound(`Tracking number '${trackingNumber}' not found`);
+      shipment = await shipmentRepository.findByOrderId(trackingNumberOrOrderId);
+    }
+    if (!shipment) {
+      throw ApiError.notFound(`Tracking number or order '${trackingNumberOrOrderId}' not found`);
     }
 
     return shipment;
