@@ -1,21 +1,19 @@
 import { Router } from 'express';
 import { orderController } from '../controllers/order.controller.js';
-import { verifyJwt } from '../middleware/verifyJwt.js';
+import { verifyJwt, optionalJwt } from '../middleware/verifyJwt.js';
 import { requireFields } from '../middleware/validateReq.js';
 
 const router = Router();
 
 router.post(
   '/checkout-summary',
-  verifyJwt,
-  requireFields(['addressId']),
+  optionalJwt,
   orderController.getCheckoutSummary
 );
 
 router.post(
   '/',
-  verifyJwt,
-  requireFields(['addressId']),
+  optionalJwt,
   orderController.createOrder
 );
 

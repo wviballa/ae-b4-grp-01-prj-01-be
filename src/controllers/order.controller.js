@@ -4,10 +4,9 @@ import { successResponse, createdResponse } from '../utils/apiResponse.js';
 export const orderController = {
   async getCheckoutSummary(req, res, next) {
     try {
-      const { addressId } = req.body;
       const summary = await orderService.getCheckoutSummary({
-        userId: req.user.userId,
-        addressId,
+        userId: req.user?.userId || null,
+        ...req.body,
       });
       return successResponse(res, summary);
     } catch (err) {
@@ -17,11 +16,9 @@ export const orderController = {
 
   async createOrder(req, res, next) {
     try {
-      const { addressId, orderNotes } = req.body;
       const order = await orderService.createOrderFromCart({
-        userId: req.user.userId,
-        addressId,
-        orderNotes,
+        userId: req.user?.userId || null,
+        ...req.body,
       });
       return createdResponse(res, order);
     } catch (err) {
