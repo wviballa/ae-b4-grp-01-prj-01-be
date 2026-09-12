@@ -226,6 +226,28 @@ export const authService = {
         }
       }
 
+      // 4. Check if token is a Supabase GoTrue Access Token JWT
+      if (!decoded) {
+        try {
+          const supabaseDecoded = jwt.decode(token);
+          const userEmail = supabaseDecoded?.email || supabaseDecoded?.user_metadata?.email;
+          const metaUserId = supabaseDecoded?.user_metadata?.userId;
+          if (metaUserId) {
+            const userById = await userRepository.findById(metaUserId);
+            if (userById) {
+              decoded = { userId: userById.userId, type: 'EMAIL_VERIFICATION' };
+            }
+          } else if (userEmail) {
+            const userByEmail = await userRepository.findByEmail(userEmail);
+            if (userByEmail) {
+              decoded = { userId: userByEmail.userId, type: 'EMAIL_VERIFICATION' };
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+
       if (!decoded) {
         throw ApiError.badRequest('Invalid or expired verification link', ['INVALID_VERIFICATION_TOKEN']);
       }
