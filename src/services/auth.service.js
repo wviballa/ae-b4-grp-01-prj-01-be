@@ -150,13 +150,26 @@ export const authService = {
   },
 
   async login({ email, password }) {
-    const user = await userRepository.findByEmail(email);
+    let user = await userRepository.findByEmail(email);
     if (!user) {
       throw ApiError.unauthorized('Invalid email or password');
     }
 
     if (user.status === 'SUSPENDED') {
       throw ApiError.forbidden('Your account has been suspended. Please contact support.');
+    }
+
+    if (user.status === 'UNVERIFIED') {
+      // Self-healing: Check if user verified email via Supabase Auth link
+      try {
+        const { data: adminUsers } = await supabaseAdmin.auth.admin.listUsers();
+        const sbUser = adminUsers?.users?.find((u) => u.email?.toLowerCase() === email.toLowerCase());
+        if (sbUser && sbUser.email_confirmed_at) {
+          user = await userRepository.verifyEmail(user.userId);
+        }
+      } catch (err) {
+        console.warn('⚠️ Error checking Supabase confirmation status on login:', err.message);
+      }
     }
 
     if (user.status === 'UNVERIFIED') {
@@ -293,9 +306,21 @@ export const authService = {
       throw ApiError.badRequest('Email is required');
     }
 
-    const user = await userRepository.findByEmail(email);
+    let user = await userRepository.findByEmail(email);
     if (!user) {
       throw ApiError.notFound('No account found with this email address');
+    }
+
+    if (user.status === 'UNVERIFIED') {
+      try {
+        const { data: adminUsers } = await supabaseAdmin.auth.admin.listUsers();
+        const sbUser = adminUsers?.users?.find((u) => u.email?.toLowerCase() === email.toLowerCase());
+        if (sbUser && sbUser.email_confirmed_at) {
+          user = await userRepository.verifyEmail(user.userId);
+        }
+      } catch (err) {
+        console.warn('⚠️ Error checking Supabase confirmation status on resend:', err.message);
+      }
     }
 
     if (user.status === 'ACTIVE') {
