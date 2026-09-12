@@ -71,9 +71,11 @@ export const authService = {
       let emailNotice = 'Account created successfully! Please check your email to verify your account.';
 
       try {
-        const redirectUrl = ENV.CLIENT_URL
-          ? `${ENV.CLIENT_URL}/verify-email`
-          : `http://localhost:${ENV.PORT}/api/v1/auth/verify-email`;
+        let clientOrigin = ENV.CLIENT_URL || `http://localhost:${ENV.PORT}/api/v1/auth`;
+        if (clientOrigin && !clientOrigin.startsWith('http://') && !clientOrigin.startsWith('https://')) {
+          clientOrigin = `https://${clientOrigin}`;
+        }
+        const redirectUrl = `${clientOrigin}/verify-email`;
 
         // 1. Trigger Supabase GoTrue Auth built-in email dispatcher via standard client
         const { error: signUpError } = await supabase.auth.signUp({
@@ -278,28 +280,50 @@ export const authService = {
       throw ApiError.badRequest('This email address has already been verified.');
     }
 
-    const redirectUrl = ENV.CLIENT_URL
-      ? `${ENV.CLIENT_URL}/verify-email`
-      : `http://localhost:${ENV.PORT}/api/v1/auth/verify-email`;
+    let clientOrigin = ENV.CLIENT_URL || `http://localhost:${ENV.PORT}/api/v1/auth`;
+    if (clientOrigin && !clientOrigin.startsWith('http://') && !clientOrigin.startsWith('https://')) {
+      clientOrigin = `https://${clientOrigin}`;
+    }
+    const redirectUrl = `${clientOrigin}/verify-email`;
+
+    let emailNotice = 'A new verification link has been sent to your email address.';
 
     try {
-      await supabaseAdmin.auth.resend({
+      const { error: resendError } = await supabase.auth.resend({
         type: 'signup',
         email: email.toLowerCase(),
         options: {
           emailRedirectTo: redirectUrl,
         },
       });
+
+      if (resendError) {
+        console.warn('⚠️ Supabase Auth resend warning:', resendError.message);
+        if (resendError.message?.includes('60 seconds') || resendError.message?.includes('security purposes')) {
+          emailNotice = 'For security, please wait 60 seconds before requesting a new verification link.';
+        } else {
+          // Fallback: If user not yet in GoTrue auth table, re-trigger signUp to send email
+          const { error: fallbackError } = await supabase.auth.signUp({
+            email: email.toLowerCase(),
+            password: 'ResendFallbackPassword123!',
+            options: {
+              emailRedirectTo: redirectUrl,
+            },
+          });
+          if (fallbackError) {
+            console.warn('⚠️ Supabase Auth fallback signUp warning:', fallbackError.message);
+          }
+        }
+      }
     } catch (err) {
-      console.warn('⚠️ Supabase Auth resend warning:', err.message);
+      console.warn('⚠️ Supabase Auth resend exception:', err.message);
     }
 
     const token = this.generateVerificationToken(user);
-    const clientBase = ENV.CLIENT_URL || `http://localhost:${ENV.PORT}/api/v1`;
-    const verificationLink = `${clientBase}/verify-email?token=${token}`;
+    const verificationLink = `${clientOrigin}/verify-email?token=${token}`;
 
     return {
-      message: 'A new verification link has been sent to your email address.',
+      message: emailNotice,
       verificationLink,
     };
   },
@@ -364,12 +388,12 @@ export const authService = {
     }
 
     const resetToken = this.generatePasswordResetToken(user);
-    const clientBase = ENV.CLIENT_URL || `http://localhost:${ENV.PORT}/api/v1/auth`;
-    const resetLink = `${clientBase}/resetPassword?token=${resetToken}`;
-
-    const redirectUrl = ENV.CLIENT_URL
-      ? `${ENV.CLIENT_URL}/resetPassword`
-      : `http://localhost:${ENV.PORT}/api/v1/auth/resetPassword`;
+    let clientOrigin = ENV.CLIENT_URL || `http://localhost:${ENV.PORT}/api/v1/auth`;
+    if (clientOrigin && !clientOrigin.startsWith('http://') && !clientOrigin.startsWith('https://')) {
+      clientOrigin = `https://${clientOrigin}`;
+    }
+    const resetLink = `${clientOrigin}/resetPassword?token=${resetToken}`;
+    const redirectUrl = `${clientOrigin}/resetPassword`;
 
     try {
       await supabase.auth.resetPasswordForEmail(email.toLowerCase(), {

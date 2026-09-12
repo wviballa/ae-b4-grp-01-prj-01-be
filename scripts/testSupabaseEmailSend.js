@@ -1,7 +1,7 @@
 import { supabase, supabaseAdmin } from '../src/config/supabase.js';
 
 async function testSupabaseEmailSend() {
-  const testEmail = `toystore_test_${Date.now()}@gmail.com`;
+  const testEmail = `toystore_test_${Date.now()}@alphaexplora.com`;
   const password = 'TestPassword123!';
   const redirectUrl = 'http://localhost:3000/verify-email';
 

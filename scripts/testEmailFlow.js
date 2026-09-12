@@ -1,7 +1,7 @@
 import { authService } from '../src/services/auth.service.js';
 
 async function testFlow() {
-  const testEmail = `test_verify_${Date.now()}@example.com`;
+  const testEmail = `test_verify_${Date.now()}@alphaexplora.com`;
   const testPassword = 'SecurePassword123!';
   const testName = 'Verification TestUser';
 
