@@ -31,15 +31,25 @@ export const productService = {
       throw ApiError.conflict(`A product with slug '${productData.slug}' already exists`);
     }
 
-    const newProduct = await productRepository.create(productData);
+    const stockQty =
+      productData.quantity !== undefined
+        ? Number(productData.quantity)
+        : productData.stockQuantity !== undefined
+        ? Number(productData.stockQuantity)
+        : productData.stock !== undefined
+        ? Number(productData.stock)
+        : productData.initialStock !== undefined
+        ? Number(productData.initialStock)
+        : 0;
+
+    const newProduct = await productRepository.create({
+      ...productData,
+      quantity: stockQty,
+    });
 
     // Initialize inventory for this product
     await inventoryRepository.createOrInit(newProduct.productId, {
-      stockQuantity:
-        productData.initialStock ??
-        productData.stock ??
-        productData.stockQuantity ??
-        50,
+      stockQuantity: stockQty,
       lowStockThreshold: productData.lowStockThreshold || 5,
     });
 
@@ -52,8 +62,20 @@ export const productService = {
       throw ApiError.notFound('Product not found');
     }
 
+    const newStockQty =
+      updateData.quantity !== undefined
+        ? Number(updateData.quantity)
+        : updateData.stockQuantity !== undefined
+        ? Number(updateData.stockQuantity)
+        : undefined;
+
+    if (newStockQty !== undefined) {
+      updateData.quantity = newStockQty;
+      await inventoryRepository.updateStock(productId, { stockQuantity: newStockQty });
+    }
+
     const updated = await productRepository.update(productId, updateData);
-    return updated;
+    return productRepository.findByIdOrSlug(productId);
   },
 
   async archiveProduct(productId) {

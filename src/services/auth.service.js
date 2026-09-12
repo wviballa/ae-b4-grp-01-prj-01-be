@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { userRepository } from '../repositories/user.repository.js';
 import { profileRepository } from '../repositories/profile.repository.js';
-import { supabaseAdmin } from '../config/supabase.js';
+import { supabase, supabaseAdmin } from '../config/supabase.js';
 import { ENV } from '../config/env.js';
 import { ApiError } from '../utils/apiError.js';
 
@@ -18,8 +18,8 @@ export const authService = {
       expiresIn: ENV.JWT_EXPIRES_IN,
     });
 
-    const refreshToken = jwt.sign(payload, ENV.JWT_REFRESH_SECRET, {
-      expiresIn: ENV.JWT_REFRESH_EXPIRES_IN,
+    const refreshToken = jwt.sign(payload, ENV.JWT_SECRET, {
+      expiresIn: ENV.JWT_REFRESH_EXPIRES_IN || '7d',
     });
 
     return { accessToken, refreshToken };
@@ -34,13 +34,12 @@ export const authService = {
   },
 
   async register({ email, password, firstName, lastName, fullName, phone, role = 'CUSTOMER' }) {
-    let resolvedFirstName = firstName;
-    let resolvedLastName = lastName;
+    if (!email || !password) {
+      throw ApiError.badRequest('Email and password are required');
+    }
 
-    if (!resolvedFirstName && fullName && typeof fullName === 'string') {
-      const parts = fullName.trim().split(/\s+/);
-      resolvedFirstName = parts[0] || '';
-      resolvedLastName = parts.slice(1).join(' ') || '';
+    if (password.length < 6) {
+      throw ApiError.badRequest('Password must be at least 6 characters long');
     }
 
     const existing = await userRepository.findByEmail(email);
@@ -48,11 +47,8 @@ export const authService = {
       throw ApiError.conflict('An account with this email address already exists');
     }
 
-    const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash(password, salt);
-
-    // ADMIN accounts default to ACTIVE, CUSTOMER accounts default to UNVERIFIED
-    const initialStatus = role === 'ADMIN' ? 'ACTIVE' : 'UNVERIFIED';
+    const passwordHash = await bcrypt.hash(password, 10);
+    const initialStatus = 'UNVERIFIED';
 
     const newUser = await userRepository.create({
       email,
@@ -60,6 +56,9 @@ export const authService = {
       role,
       status: initialStatus,
     });
+
+    const resolvedFirstName = firstName || (fullName ? fullName.split(' ')[0] : 'Valued');
+    const resolvedLastName = lastName || (fullName ? fullName.split(' ').slice(1).join(' ') : 'Customer');
 
     const profile = await profileRepository.createOrUpdate(newUser.userId, {
       firstName: resolvedFirstName,
@@ -69,14 +68,15 @@ export const authService = {
 
     if (initialStatus === 'UNVERIFIED') {
       let verificationLink;
+      let emailNotice = 'Account created successfully! Please check your email to verify your account.';
 
       try {
         const redirectUrl = ENV.CLIENT_URL
           ? `${ENV.CLIENT_URL}/verify-email`
           : `http://localhost:${ENV.PORT}/api/v1/auth/verify-email`;
 
-        // 1. Trigger Supabase GoTrue Auth to send email via Supabase Mailer
-        const { error: signUpError } = await supabaseAdmin.auth.signUp({
+        // 1. Trigger Supabase GoTrue Auth built-in email dispatcher via standard client
+        const { error: signUpError } = await supabase.auth.signUp({
           email: email.toLowerCase(),
           password,
           options: {
@@ -90,7 +90,10 @@ export const authService = {
         });
 
         if (signUpError) {
-          console.warn('⚠️ Supabase Auth signUp warning:', signUpError.message);
+          console.warn('⚠️ Supabase Auth signUp email warning:', signUpError.message);
+          if (signUpError.message?.includes('rate limit')) {
+            emailNotice = 'Account created! Supabase email rate limit reached (max 4 emails/hr on free tier). Please verify via link or wait a few minutes.';
+          }
         }
 
         // 2. Generate action link as fallback / dev reference
@@ -126,7 +129,7 @@ export const authService = {
         },
         requiresVerification: true,
         verificationLink,
-        message: 'Account created successfully! Please check your email to verify your account.',
+        message: emailNotice,
       };
     }
 
@@ -338,5 +341,80 @@ export const authService = {
 
   async updateProfile(userId, profileData) {
     return profileRepository.createOrUpdate(userId, profileData);
+  },
+
+  generatePasswordResetToken(user) {
+    return jwt.sign(
+      { userId: user.userId, email: user.email, type: 'PASSWORD_RESET' },
+      ENV.JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+  },
+
+  async forgotPassword(email) {
+    if (!email) {
+      throw ApiError.badRequest('Email is required');
+    }
+
+    const genericMessage = 'If an account exists with this email address, a password reset link has been sent.';
+
+    const user = await userRepository.findByEmail(email);
+    if (!user) {
+      return { message: genericMessage };
+    }
+
+    const resetToken = this.generatePasswordResetToken(user);
+    const clientBase = ENV.CLIENT_URL || `http://localhost:${ENV.PORT}/api/v1/auth`;
+    const resetLink = `${clientBase}/resetPassword?token=${resetToken}`;
+
+    const redirectUrl = ENV.CLIENT_URL
+      ? `${ENV.CLIENT_URL}/resetPassword`
+      : `http://localhost:${ENV.PORT}/api/v1/auth/resetPassword`;
+
+    try {
+      await supabase.auth.resetPasswordForEmail(email.toLowerCase(), {
+        redirectTo: redirectUrl,
+      });
+    } catch (err) {
+      console.warn('Supabase Auth resetPasswordForEmail warning:', err.message);
+    }
+
+    return {
+      message: genericMessage,
+      resetLink,
+    };
+  },
+
+  async resetPassword({ token, newPassword }) {
+    if (!token) {
+      throw ApiError.badRequest('Reset token is required');
+    }
+
+    if (!newPassword || newPassword.length < 6) {
+      throw ApiError.badRequest('New password must be at least 6 characters long');
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, ENV.JWT_SECRET);
+    } catch {
+      throw ApiError.badRequest('Invalid or expired password reset token');
+    }
+
+    if (decoded.type !== 'PASSWORD_RESET') {
+      throw ApiError.badRequest('Invalid token type for password reset');
+    }
+
+    const user = await userRepository.findById(decoded.userId);
+    if (!user) {
+      throw ApiError.notFound('User not found');
+    }
+
+    const newPasswordHash = await bcrypt.hash(newPassword, 10);
+    await userRepository.updatePassword(user.userId, newPasswordHash);
+
+    return {
+      message: 'Password has been reset successfully. You can now log in with your new password.',
+    };
   },
 };

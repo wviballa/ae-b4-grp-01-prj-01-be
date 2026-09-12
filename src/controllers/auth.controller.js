@@ -98,6 +98,29 @@ export const authController = {
     }
   },
 
+  async forgotPassword(req, res, next) {
+    try {
+      const { email } = req.body;
+      const result = await authService.forgotPassword(email);
+      return successResponse(res, result);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async resetPassword(req, res, next) {
+    try {
+      const { token, newPassword, password } = req.body;
+      const result = await authService.resetPassword({
+        token,
+        newPassword: newPassword || password,
+      });
+      return successResponse(res, result);
+    } catch (err) {
+      next(err);
+    }
+  },
+
   async getProfile(req, res, next) {
     try {
       const profile = await authService.getProfile(req.user.userId);

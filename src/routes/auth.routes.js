@@ -38,6 +38,33 @@ router.post(
   authController.resendVerification
 );
 
+// Password Recovery (camelCase & kebab-case routes supported)
+router.post(
+  '/forgotPassword',
+  authRateLimiter,
+  requireFields(['email']),
+  authController.forgotPassword
+);
+router.post(
+  '/forgot-password',
+  authRateLimiter,
+  requireFields(['email']),
+  authController.forgotPassword
+);
+
+router.post(
+  '/resetPassword',
+  authRateLimiter,
+  requireFields(['token']),
+  authController.resetPassword
+);
+router.post(
+  '/reset-password',
+  authRateLimiter,
+  requireFields(['token']),
+  authController.resetPassword
+);
+
 // Optional helper route for /api/v1/auth/me or /api/v1/auth/profile
 router.get('/me', verifyJwt, authController.getProfile);
 router.get('/profile', verifyJwt, authController.getProfile);

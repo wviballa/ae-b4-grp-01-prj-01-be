@@ -62,5 +62,17 @@ export const userRepository = {
     if (error) throw error;
     return data;
   },
+
+  async updatePassword(userId, passwordHash) {
+    const { data, error } = await supabaseAdmin
+      .from('users')
+      .update({ passwordHash })
+      .eq('userId', userId)
+      .select('userId, email, role, status')
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
 };
 

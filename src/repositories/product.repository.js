@@ -1,5 +1,20 @@
 import { supabaseAdmin } from '../config/supabase.js';
 
+function formatProduct(p) {
+  if (!p) return p;
+  const stockQty = p.inventory?.stockQuantity ?? p.quantity ?? 0;
+  const reservedQty = p.inventory?.reservedQuantity ?? 0;
+  const availableQty = Math.max(0, stockQty - reservedQty);
+  return {
+    ...p,
+    quantity: stockQty,
+    stockQuantity: stockQty,
+    availableQuantity: availableQty,
+    inStock: availableQty > 0,
+    isOutOfStock: availableQty <= 0,
+  };
+}
+
 export const productRepository = {
   async findAll({
     categoryId,
@@ -84,8 +99,10 @@ export const productRepository = {
     const { data, count, error } = await query;
     if (error) throw error;
 
+    const formattedProducts = (data || []).map(formatProduct);
+
     return {
-      products: data || [],
+      products: formattedProducts,
       total: count || 0,
       page,
       limit,
@@ -118,7 +135,7 @@ export const productRepository = {
 
     const { data, error } = await query.limit(1).maybeSingle();
     if (error) throw error;
-    return data;
+    return formatProduct(data);
   },
 
   async create(productData) {
@@ -157,7 +174,7 @@ export const productRepository = {
       .single();
 
     if (error) throw error;
-    return data;
+    return formatProduct(data);
   },
 
   async update(productId, updateData) {
@@ -183,15 +200,19 @@ export const productRepository = {
       }
     }
 
-    const { data, error } = await supabaseAdmin
-      .from('products')
-      .update(payload)
-      .eq('productId', productId)
-      .select('*')
-      .single();
+    if (Object.keys(payload).length > 0) {
+      const { data, error } = await supabaseAdmin
+        .from('products')
+        .update(payload)
+        .eq('productId', productId)
+        .select('*')
+        .single();
 
-    if (error) throw error;
-    return data;
+      if (error) throw error;
+      return formatProduct(data);
+    }
+
+    return this.findByIdOrSlug(productId);
   },
 
   async archive(productId) {
