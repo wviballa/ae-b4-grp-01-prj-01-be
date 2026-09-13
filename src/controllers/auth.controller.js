@@ -53,30 +53,150 @@ export const authController = {
       const token = req.query.token || req.body.token;
       const result = await authService.verifyEmail(token);
 
-      // If browser accepts HTML, render clean confirmation UI
+      // If browser accepts HTML, render clean confirmation UI with cross-tab sync and auto-close
       if (req.headers.accept && req.headers.accept.includes('text/html')) {
+        const userJson = JSON.stringify(result.user || {});
         return res.send(`
           <!DOCTYPE html>
-          <html>
+          <html lang="en">
           <head>
             <title>Email Verified - Toy Store</title>
+            <meta charset="UTF-8" />
             <meta name="viewport" content="width=device-width, initial-scale=1.0" />
             <style>
-              body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #f8fafc; color: #1e293b; }
-              .card { background: white; padding: 2.5rem; border-radius: 16px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.08); text-align: center; max-width: 420px; width: 90%; }
-              .icon { font-size: 3rem; margin-bottom: 1rem; }
-              h1 { color: #16a34a; font-size: 1.6rem; margin: 0 0 0.5rem 0; font-weight: 700; }
-              p { color: #64748b; font-size: 0.95rem; line-height: 1.5; margin-bottom: 1.5rem; }
-              .badge { display: inline-block; background: #dcfce7; color: #15803d; padding: 0.35rem 0.85rem; border-radius: 9999px; font-weight: 600; font-size: 0.85rem; margin-bottom: 1.5rem; }
+              * { box-sizing: border-box; }
+              body {
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                min-height: 100vh;
+                margin: 0;
+                background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+                color: #f8fafc;
+              }
+              .card {
+                background: #1e293b;
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                padding: 2.5rem;
+                border-radius: 20px;
+                box-shadow: 0 20px 40px -15px rgba(0,0,0,0.5);
+                text-align: center;
+                max-width: 440px;
+                width: 90%;
+                animation: fadeIn 0.4s ease-out;
+              }
+              @keyframes fadeIn {
+                from { opacity: 0; transform: translateY(10px); }
+                to { opacity: 1; transform: translateY(0); }
+              }
+              .icon-wrapper {
+                width: 80px;
+                height: 80px;
+                background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin: 0 auto 1.25rem auto;
+                box-shadow: 0 8px 20px rgba(34, 197, 94, 0.3);
+              }
+              .icon { font-size: 2.5rem; color: white; }
+              h1 { color: #ffffff; font-size: 1.6rem; margin: 0 0 0.5rem 0; font-weight: 700; }
+              .badge {
+                display: inline-block;
+                background: rgba(34, 197, 94, 0.15);
+                color: #4ade80;
+                border: 1px solid rgba(74, 222, 128, 0.3);
+                padding: 0.35rem 0.85rem;
+                border-radius: 9999px;
+                font-weight: 600;
+                font-size: 0.85rem;
+                margin-bottom: 1.25rem;
+              }
+              p { color: #94a3b8; font-size: 0.95rem; line-height: 1.5; margin-bottom: 1.5rem; }
+              .countdown-text { color: #64748b; font-size: 0.85rem; margin-top: 1rem; }
+              .countdown-num { font-weight: 700; color: #38bdf8; }
+              .btn {
+                display: inline-block;
+                width: 100%;
+                background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+                color: white;
+                font-weight: 600;
+                font-size: 0.95rem;
+                padding: 0.75rem 1.5rem;
+                border: none;
+                border-radius: 12px;
+                cursor: pointer;
+                transition: transform 0.15s ease, box-shadow 0.15s ease;
+                box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+                text-decoration: none;
+              }
+              .btn:hover {
+                transform: translateY(-1px);
+                box-shadow: 0 6px 16px rgba(37, 99, 235, 0.4);
+              }
             </style>
           </head>
           <body>
             <div class="card">
-              <div class="icon">🎉</div>
+              <div class="icon-wrapper">
+                <div class="icon">✓</div>
+              </div>
               <h1>Email Verified Successfully!</h1>
               <div class="badge">Account Active</div>
-              <p>Your account has been activated. You can now return to the Toy Store application and log in.</p>
+              <p>Your account is now verified and active. You can return to your previous app tab to continue.</p>
+              <button class="btn" onclick="closeOrReturn()">Close Tab & Return to App</button>
+              <div class="countdown-text">Closing tab in <span id="timer" class="countdown-num">3</span>s...</div>
             </div>
+
+            <script>
+              (function() {
+                const userData = ${userJson};
+                const eventPayload = { verified: true, user: userData, timestamp: Date.now() };
+
+                // 1. Cross-tab message via BroadcastChannel
+                try {
+                  if ('BroadcastChannel' in window) {
+                    const bc = new BroadcastChannel('toystore_auth');
+                    bc.postMessage(eventPayload);
+                  }
+                } catch(e) {}
+
+                // 2. Cross-tab message via localStorage fallback
+                try {
+                  localStorage.setItem('toystore_email_verified', JSON.stringify(eventPayload));
+                } catch(e) {}
+
+                // 3. Try focusing opener tab if available
+                try {
+                  if (window.opener && !window.opener.closed) {
+                    window.opener.focus();
+                  }
+                } catch(e) {}
+
+                // 4. Auto-close countdown
+                let seconds = 3;
+                const timerEl = document.getElementById('timer');
+                const interval = setInterval(function() {
+                  seconds--;
+                  if (timerEl) timerEl.innerText = seconds;
+                  if (seconds <= 0) {
+                    clearInterval(interval);
+                    window.close();
+                  }
+                }, 1000);
+              })();
+
+              function closeOrReturn() {
+                try {
+                  if (window.opener && !window.opener.closed) {
+                    window.opener.focus();
+                  }
+                } catch(e) {}
+                window.close();
+              }
+            </script>
           </body>
           </html>
         `);

@@ -71,10 +71,7 @@ export const authService = {
       let emailNotice = 'Account created successfully! Please check your email to verify your account.';
 
       try {
-        let clientOrigin = ENV.CLIENT_URL || `http://localhost:${ENV.PORT}/api/v1/auth`;
-        if (clientOrigin && !clientOrigin.startsWith('http://') && !clientOrigin.startsWith('https://')) {
-          clientOrigin = `https://${clientOrigin}`;
-        }
+        const clientOrigin = ENV.getPublicBaseUrl();
         const redirectUrl = `${clientOrigin}/verify-email`;
 
         // 1. Trigger Supabase GoTrue Auth built-in email dispatcher via standard client
@@ -97,29 +94,14 @@ export const authService = {
             emailNotice = 'Account created! Supabase email rate limit reached (max 4 emails/hr on free tier). Please verify via link or wait a few minutes.';
           }
         }
-
-        // 2. Generate action link as fallback / dev reference
-        const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
-          type: 'signup',
-          email: email.toLowerCase(),
-          password,
-          options: {
-            redirectTo: redirectUrl,
-          },
-        });
-
-        if (!linkError && linkData?.properties?.action_link) {
-          verificationLink = linkData.properties.action_link;
-        }
       } catch (err) {
         console.warn('⚠️ Supabase Auth email link warning:', err.message);
       }
 
-      if (!verificationLink) {
-        const token = this.generateVerificationToken(newUser);
-        const clientBase = ENV.CLIENT_URL || `http://localhost:${ENV.PORT}/api/v1`;
-        verificationLink = `${clientBase}/verify-email?token=${token}`;
-      }
+      // Generate custom JWT verification fallback link without invalidating Supabase OTP
+      const token = this.generateVerificationToken(newUser);
+      const clientBase = ENV.getPublicBaseUrl();
+      verificationLink = `${clientBase}/verify-email?token=${token}`;
 
       return {
         user: {
@@ -327,10 +309,7 @@ export const authService = {
       throw ApiError.badRequest('This email address has already been verified.');
     }
 
-    let clientOrigin = ENV.CLIENT_URL || `http://localhost:${ENV.PORT}/api/v1/auth`;
-    if (clientOrigin && !clientOrigin.startsWith('http://') && !clientOrigin.startsWith('https://')) {
-      clientOrigin = `https://${clientOrigin}`;
-    }
+    const clientOrigin = ENV.getPublicBaseUrl();
     const redirectUrl = `${clientOrigin}/verify-email`;
 
     let emailNotice = 'A new verification link has been sent to your email address.';
@@ -435,10 +414,7 @@ export const authService = {
     }
 
     const resetToken = this.generatePasswordResetToken(user);
-    let clientOrigin = ENV.CLIENT_URL || `http://localhost:${ENV.PORT}/api/v1/auth`;
-    if (clientOrigin && !clientOrigin.startsWith('http://') && !clientOrigin.startsWith('https://')) {
-      clientOrigin = `https://${clientOrigin}`;
-    }
+    const clientOrigin = ENV.getPublicBaseUrl();
     const resetLink = `${clientOrigin}/resetPassword?token=${resetToken}`;
     const redirectUrl = `${clientOrigin}/resetPassword`;
 
