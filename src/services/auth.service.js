@@ -220,37 +220,34 @@ export const authService = {
         console.warn('⚠️ Supabase verifyOtp error:', err.message);
       }
 
-      // 3. Check if token is a direct user identifier or matches an unverified user
+      // 3. Check if token corresponds to a user verified in Supabase Auth
       if (!decoded) {
         try {
-          const userById = await userRepository.findById(token);
-          if (userById) {
-            decoded = { userId: userById.userId, type: 'EMAIL_VERIFICATION' };
+          // Extract user ID or email from string/JWT
+          let targetUserId = token;
+          let targetEmail = null;
+          try {
+            const parsedJwt = jwt.decode(token);
+            if (parsedJwt?.user_metadata?.userId) targetUserId = parsedJwt.user_metadata.userId;
+            if (parsedJwt?.email || parsedJwt?.user_metadata?.email) targetEmail = parsedJwt.email || parsedJwt.user_metadata.email;
+          } catch {
+            // Not a JWT, use token as string
+          }
+
+          let dbUser = await userRepository.findById(targetUserId);
+          if (!dbUser && targetEmail) {
+            dbUser = await userRepository.findByEmail(targetEmail);
+          }
+
+          if (dbUser) {
+            // CRITICAL SECURITY CHECK: Require email_confirmed_at in Supabase Auth before accepting
+            const { data: sbData } = await supabaseAdmin.auth.admin.getUserById(dbUser.userId);
+            if (sbData?.user?.email_confirmed_at) {
+              decoded = { userId: dbUser.userId, type: 'EMAIL_VERIFICATION' };
+            }
           }
         } catch {
           // ignore lookup error
-        }
-      }
-
-      // 4. Check if token is a Supabase GoTrue Access Token JWT
-      if (!decoded) {
-        try {
-          const supabaseDecoded = jwt.decode(token);
-          const userEmail = supabaseDecoded?.email || supabaseDecoded?.user_metadata?.email;
-          const metaUserId = supabaseDecoded?.user_metadata?.userId;
-          if (metaUserId) {
-            const userById = await userRepository.findById(metaUserId);
-            if (userById) {
-              decoded = { userId: userById.userId, type: 'EMAIL_VERIFICATION' };
-            }
-          } else if (userEmail) {
-            const userByEmail = await userRepository.findByEmail(userEmail);
-            if (userByEmail) {
-              decoded = { userId: userByEmail.userId, type: 'EMAIL_VERIFICATION' };
-            }
-          }
-        } catch {
-          // ignore
         }
       }
 
