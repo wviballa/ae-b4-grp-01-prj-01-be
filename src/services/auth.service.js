@@ -455,14 +455,34 @@ export const authService = {
     }
 
     let decoded;
+
+    // 1. Check custom signed JWT reset token
     try {
       decoded = jwt.verify(token, ENV.JWT_SECRET);
+      if (decoded.type !== 'PASSWORD_RESET') {
+        decoded = null;
+      }
     } catch {
-      throw ApiError.badRequest('Invalid or expired password reset token');
+      // 2. Check Supabase OTP recovery token_hash (from email template {{ .TokenHash }})
+      try {
+        const { data: otpData, error: otpError } = await supabaseAdmin.auth.verifyOtp({
+          token_hash: token,
+          type: 'recovery',
+        });
+
+        if (!otpError && otpData?.user?.email) {
+          const userByEmail = await userRepository.findByEmail(otpData.user.email);
+          if (userByEmail) {
+            decoded = { userId: userByEmail.userId, email: userByEmail.email, type: 'PASSWORD_RESET' };
+          }
+        }
+      } catch (err) {
+        console.warn('⚠️ Supabase recovery verifyOtp warning:', err.message);
+      }
     }
 
-    if (decoded.type !== 'PASSWORD_RESET') {
-      throw ApiError.badRequest('Invalid token type for password reset');
+    if (!decoded || !decoded.userId) {
+      throw ApiError.badRequest('Invalid or expired password reset token');
     }
 
     const user = await userRepository.findById(decoded.userId);
@@ -472,6 +492,17 @@ export const authService = {
 
     const newPasswordHash = await bcrypt.hash(newPassword, 10);
     await userRepository.updatePassword(user.userId, newPasswordHash);
+
+    // Sync password to Supabase Auth if user exists in GoTrue table
+    try {
+      const { data: adminUsers } = await supabaseAdmin.auth.admin.listUsers();
+      const sbUser = adminUsers?.users?.find((u) => u.email?.toLowerCase() === user.email.toLowerCase());
+      if (sbUser) {
+        await supabaseAdmin.auth.admin.updateUserById(sbUser.id, { password: newPassword });
+      }
+    } catch (err) {
+      console.warn('⚠️ Supabase Auth password sync warning:', err.message);
+    }
 
     return {
       message: 'Password has been reset successfully. You can now log in with your new password.',
