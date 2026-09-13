@@ -479,6 +479,28 @@ export const authService = {
       } catch (err) {
         console.warn('⚠️ Supabase recovery verifyOtp warning:', err.message);
       }
+
+      // 3. Check if token is a Supabase GoTrue Access Token or contains decoded user claims
+      if (!decoded) {
+        try {
+          const supabaseDecoded = jwt.decode(token);
+          const userEmail = supabaseDecoded?.email || supabaseDecoded?.user_metadata?.email;
+          const metaUserId = supabaseDecoded?.user_metadata?.userId;
+          if (metaUserId) {
+            const userById = await userRepository.findById(metaUserId);
+            if (userById) {
+              decoded = { userId: userById.userId, email: userById.email, type: 'PASSWORD_RESET' };
+            }
+          } else if (userEmail) {
+            const userByEmail = await userRepository.findByEmail(userEmail);
+            if (userByEmail) {
+              decoded = { userId: userByEmail.userId, email: userByEmail.email, type: 'PASSWORD_RESET' };
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
     }
 
     if (!decoded || !decoded.userId) {
