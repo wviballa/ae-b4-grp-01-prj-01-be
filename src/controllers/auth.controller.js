@@ -145,9 +145,9 @@ export const authController = {
               </div>
               <h1>Email Verified Successfully!</h1>
               <div class="badge">Account Active</div>
-              <p>Your account is now verified and active. You can return to your previous app tab to continue.</p>
-              <button class="btn" onclick="closeOrReturn()">Close Tab & Return to App</button>
-              <div class="countdown-text">Closing tab in <span id="timer" class="countdown-num">3</span>s...</div>
+              <p>Your account is now verified and active. You can now log in with your email and password.</p>
+              <a href="${ENV.getPublicBaseUrl()}/login?verified=true" class="btn">Proceed to Login</a>
+              <div class="countdown-text">Redirecting to login in <span id="timer" class="countdown-num">3</span>s...</div>
             </div>
 
             <script>
@@ -168,14 +168,7 @@ export const authController = {
                   localStorage.setItem('toystore_email_verified', JSON.stringify(eventPayload));
                 } catch(e) {}
 
-                // 3. Try focusing opener tab if available
-                try {
-                  if (window.opener && !window.opener.closed) {
-                    window.opener.focus();
-                  }
-                } catch(e) {}
-
-                // 4. Auto-close countdown
+                // 3. Auto-redirect countdown to /login?verified=true
                 let seconds = 3;
                 const timerEl = document.getElementById('timer');
                 const interval = setInterval(function() {
@@ -183,18 +176,13 @@ export const authController = {
                   if (timerEl) timerEl.innerText = seconds;
                   if (seconds <= 0) {
                     clearInterval(interval);
-                    window.close();
+                    window.location.href = "${ENV.getPublicBaseUrl()}/login?verified=true";
                   }
                 }, 1000);
               })();
 
               function closeOrReturn() {
-                try {
-                  if (window.opener && !window.opener.closed) {
-                    window.opener.focus();
-                  }
-                } catch(e) {}
-                window.close();
+                window.location.href = "${ENV.getPublicBaseUrl()}/login?verified=true";
               }
             </script>
           </body>

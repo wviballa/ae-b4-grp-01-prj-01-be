@@ -72,7 +72,7 @@ export const authService = {
 
       try {
         const clientOrigin = ENV.getPublicBaseUrl();
-        const redirectUrl = `${clientOrigin}/verify-email`;
+        const redirectUrl = `${clientOrigin}/login?verified=true`;
 
         // 1. Trigger Supabase GoTrue Auth built-in email dispatcher via standard client
         const { error: signUpError } = await supabase.auth.signUp({
@@ -101,7 +101,7 @@ export const authService = {
       // Generate custom JWT verification fallback link without invalidating Supabase OTP
       const token = this.generateVerificationToken(newUser);
       const clientBase = ENV.getPublicBaseUrl();
-      verificationLink = `${clientBase}/verify-email?token=${token}`;
+      verificationLink = `${clientBase}/login?token=${token}&verified=true`;
 
       return {
         user: {
@@ -321,7 +321,7 @@ export const authService = {
     }
 
     const clientOrigin = ENV.getPublicBaseUrl();
-    const redirectUrl = `${clientOrigin}/verify-email`;
+    const redirectUrl = `${clientOrigin}/login?verified=true`;
 
     let emailNotice = 'A new verification link has been sent to your email address.';
 
@@ -357,7 +357,7 @@ export const authService = {
     }
 
     const token = this.generateVerificationToken(user);
-    const verificationLink = `${clientOrigin}/verify-email?token=${token}`;
+    const verificationLink = `${clientOrigin}/login?token=${token}&verified=true`;
 
     return {
       message: emailNotice,
