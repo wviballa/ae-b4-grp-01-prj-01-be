@@ -212,7 +212,7 @@ export const adminController = {
   // --- Dashboard BI Overview ---
   async getOverview(req, res, next) {
     try {
-      const { from, to } = req.query;
+      const { from, to } = req.query || {};
 
       // 1. Fetch products count
       const { count: totalProductsCount } = await supabaseAdmin
