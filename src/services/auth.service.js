@@ -109,6 +109,8 @@ export const authService = {
           email: newUser.email,
           role: newUser.role,
           status: newUser.status,
+          isEmailVerified: false,
+          isVerified: false,
           profile,
         },
         requiresVerification: true,
@@ -142,12 +144,19 @@ export const authService = {
     }
 
     if (user.status === 'UNVERIFIED') {
-      // Self-healing: Check if user verified email via Supabase Auth link
+      // Fast Self-Healing: Check if user verified email via Supabase Auth link
       try {
-        const { data: adminUsers } = await supabaseAdmin.auth.admin.listUsers();
-        const sbUser = adminUsers?.users?.find((u) => u.email?.toLowerCase() === email.toLowerCase());
-        if (sbUser && sbUser.email_confirmed_at) {
+        // 1. Direct lookup by user ID (fastest)
+        const { data: sbData } = await supabaseAdmin.auth.admin.getUserById(user.userId);
+        if (sbData?.user?.email_confirmed_at) {
           user = await userRepository.verifyEmail(user.userId);
+        } else {
+          // 2. Fallback lookup by email
+          const { data: adminUsers } = await supabaseAdmin.auth.admin.listUsers();
+          const sbUser = adminUsers?.users?.find((u) => u.email?.toLowerCase() === email.toLowerCase());
+          if (sbUser && sbUser.email_confirmed_at) {
+            user = await userRepository.verifyEmail(user.userId);
+          }
         }
       } catch (err) {
         console.warn('⚠️ Error checking Supabase confirmation status on login:', err.message);
@@ -176,6 +185,8 @@ export const authService = {
         email: user.email,
         role: user.role,
         status: user.status,
+        isEmailVerified: user.status === 'ACTIVE',
+        isVerified: user.status === 'ACTIVE',
         profile,
       },
       ...tokens,
@@ -277,8 +288,11 @@ export const authService = {
         email: updatedUser.email,
         role: updatedUser.role,
         status: updatedUser.status,
+        isEmailVerified: true,
+        isVerified: true,
         profile,
       },
+      message: 'Email verified successfully!',
       ...tokens,
     };
   },
@@ -385,6 +399,8 @@ export const authService = {
       email: user.email,
       role: user.role,
       status: user.status,
+      isEmailVerified: user.status === 'ACTIVE',
+      isVerified: user.status === 'ACTIVE',
       profile,
     };
   },

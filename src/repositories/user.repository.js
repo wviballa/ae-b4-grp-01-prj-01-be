@@ -44,7 +44,7 @@ export const userRepository = {
       .from('users')
       .update({ status: 'ACTIVE' })
       .eq('userId', userId)
-      .select('userId, email, role, status')
+      .select('userId, email, role, status, passwordHash')
       .single();
 
     if (error) throw error;
